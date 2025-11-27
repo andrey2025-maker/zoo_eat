@@ -2,7 +2,6 @@ import os
 import re
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import MessageEntity
 from aiogram.exceptions import TelegramAPIError
 from dotenv import load_dotenv
 
@@ -14,10 +13,10 @@ TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 SOURCE_CHAT_ID = -1003455001864
 TARGET_CHAT_ID = -1003158225734
 
-# Список слов, которые нужно удалить полностью
+# Слова, которые нужно удалить
 REMOVE_WORDS = ["Груша", "Ананас"]
 
-# Слова для замены на "красивое" название
+# Замена на "красивые" названия
 REPLACE_WORDS = {
     "Манго": "Gold Mango",
     "Драконий фрукт": "Dragon Fruit",
@@ -49,7 +48,7 @@ EMOJI_MAP = {
     "Желудь": "🌰",
 }
 
-# Настройка жирного шрифта для конкретного фрукта
+# Какие слова делать жирными
 BOLD_FRUITS = {
     "Gold Mango": False,
     "Dragon Fruit": False,
@@ -69,6 +68,7 @@ BOLD_FRUITS = {
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
+
 
 def clean_text(text: str) -> str:
     """Удаляет слова из REMOVE_WORDS и эмодзи."""
@@ -92,11 +92,16 @@ def clean_text(text: str) -> str:
     )
     return emoji_pattern.sub(r'', text).strip()
 
-def format_with_emoji(text: str):
-    """Форматирование текста с эмодзи и жирным шрифтом через MessageEntity."""
+
+def escape_markdown(text: str) -> str:
+    """Экранируем специальные символы MarkdownV2."""
+    return re.sub(r'([_\*\[\]\(\)~`>#+\-=|{}.!])', r'\\\1', text)
+
+
+def format_with_emoji_markdown(text: str) -> str:
+    """Форматирование текста с эмодзи и жирным через MarkdownV2."""
     lines = text.split("\n")
-    result_text = ""
-    entities = []
+    result_lines = []
 
     for line in lines:
         match = re.match(r"(x\d+)\s*(.+)", line)
@@ -104,35 +109,26 @@ def format_with_emoji(text: str):
             quantity = match.group(1)
             item_orig = match.group(2).strip()
 
-            # Замена на "красивое" название
-            for key in REPLACE_WORDS:
-                if key in item_orig:
-                    item_cleaned = REPLACE_WORDS[key]
-                    break
-            else:
-                item_cleaned = item_orig
+            # Замена на красивое название
+            item_cleaned = REPLACE_WORDS.get(item_orig, item_orig)
 
             # Эмодзи
             emoji = EMOJI_MAP.get(item_cleaned, "❓")
 
-            # Жирный шрифт
-            is_bold = BOLD_FRUITS.get(item_cleaned, False)
-            display_name = item_cleaned  # Убираем <b>
+            # MarkdownV2 жирность
+            if BOLD_FRUITS.get(item_cleaned, False):
+                item_display = f"*{item_cleaned}*"
+            else:
+                item_display = item_cleaned
 
             # Формируем строку
-            text_line = f"{emoji} {quantity} {display_name} — stock"
-            start_offset = len(result_text) + text_line.find(display_name)
-            result_text += text_line + "\n"
+            text_line = f"{emoji} {quantity} {item_display} — stock"
+            # Экранируем MarkdownV2 символы
+            text_line = escape_markdown(text_line)
+            result_lines.append(text_line)
 
-            # Добавление MessageEntity для жирного текста
-            if is_bold:
-                entities.append(MessageEntity(
-                    type="bold",
-                    offset=start_offset,
-                    length=len(display_name)
-                ))
+    return "\n".join(result_lines)
 
-    return result_text.strip(), entities
 
 @dp.message()
 async def forward_zoo_news(message: types.Message):
@@ -147,7 +143,7 @@ async def forward_zoo_news(message: types.Message):
         return
 
     cleaned_content = clean_text(content)
-    final_text, entities = format_with_emoji(cleaned_content)
+    final_text = format_with_emoji_markdown(cleaned_content)
 
     if not final_text:
         print("Нет строк с товарами для отправки")
@@ -157,15 +153,17 @@ async def forward_zoo_news(message: types.Message):
         await bot.send_message(
             TARGET_CHAT_ID,
             final_text,
-            entities=entities  # parse_mode не нужен
+            parse_mode="MarkdownV2"
         )
         print(f"Отправлено:\n{final_text}\n")
     except TelegramAPIError as e:
         print(f"Ошибка при отправке: {e}")
 
+
 async def main():
     print("Бот запущен. Жду новые сообщения...")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

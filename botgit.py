@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramAPIError
 
 # ===== Настройки =====
 # Токен берется из переменной окружения
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 SOURCE_CHAT_ID = -1003455001864
 TARGET_CHAT_ID = -1003158225734
 

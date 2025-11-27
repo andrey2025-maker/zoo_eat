@@ -5,14 +5,19 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.exceptions import TelegramAPIError
 from dotenv import load_dotenv
 
-# ===== Загрузка переменных окружения =====
-load_dotenv()  # Подгружаем .env
+# ===== Загружаем токен из .env =====
+load_dotenv()
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
+
+# ===== Чаты =====
+SOURCE_CHANNEL_ID = -1003291808303  # Канал, откуда бот читает
+TARGET_CHAT_ID = -1003294880580     # Группа, куда отправлять
+TARGET_CHANNEL_ID = -1002937331045  # Канал, куда отправлять
+
+# ID темы внутри группы
+TARGET_THREAD_ID = 4
 
 # ===== Настройки =====
-TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
-SOURCE_CHAT_ID = -1003455001864
-TARGET_CHAT_ID = -1003158225734
-
 REMOVE_WORDS = ["Груша", "Ананас"]
 
 REPLACE_WORDS = {
@@ -60,17 +65,19 @@ BOLD_FRUITS = {
     "Желудь": True,
 }
 
+# ===== Инициализация бота =====
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-
+# ===== Функции обработки =====
 def clean_text(text: str) -> str:
-    """Удаляет слова из REMOVE_WORDS и эмодзи."""
+    """Удаляет запрещённые слова и эмодзи."""
     for word in REMOVE_WORDS:
         pattern = r".{0,3}" + re.escape(word)
         text = re.sub(pattern, "", text)
+
     emoji_pattern = re.compile(
-        "["
+        "[" 
         "\U0001F600-\U0001F64F"
         "\U0001F300-\U0001F5FF"
         "\U0001F680-\U0001F6FF"
@@ -81,74 +88,88 @@ def clean_text(text: str) -> str:
         "\U00002B00-\U00002BFF"
         "\U0001FA70-\U0001FAFF"
         "]+",
-        flags=re.UNICODE,
+        flags=re.UNICODE
     )
-    return emoji_pattern.sub(r'', text).strip()
+    return emoji_pattern.sub("", text).strip()
 
 
-def format_with_emoji(text: str):
-    """Форматирование текста с эмодзи и жирным шрифтом через HTML."""
+def format_with_emoji(text: str) -> str:
+    """Добавляет эмодзи и жирный текст через HTML."""
     lines = text.split("\n")
-    result_text = ""
-
+    result = ""
     for line in lines:
         match = re.match(r"(x\d+)\s*(.+)", line)
-        if match:
-            quantity = match.group(1)
-            item_orig = match.group(2).strip()
+        if not match:
+            continue
 
-            for key in REPLACE_WORDS:
-                if key in item_orig:
-                    item_cleaned = REPLACE_WORDS[key]
-                    break
-            else:
-                item_cleaned = item_orig
+        qty = match.group(1)
+        item_raw = match.group(2).strip()
 
-            print(f"Обрабатываем: '{item_orig}' -> '{item_cleaned}'")
+        for key, val in REPLACE_WORDS.items():
+            if key in item_raw:
+                item = val
+                break
+        else:
+            item = item_raw
 
-            emoji = EMOJI_MAP.get(item_cleaned, "❓")
+        emoji = EMOJI_MAP.get(item, "❓")
+        bold = BOLD_FRUITS.get(item, False)
+        name = f"<b>{item}</b>" if bold else item
 
-            is_bold = BOLD_FRUITS.get(item_cleaned, False)
-            display_name = f"<b>{item_cleaned}</b>" if is_bold else item_cleaned
+        result += f"{emoji} {qty} {name} — stock\n"
 
-            text_line = f"{emoji} {quantity} {display_name} — stock"
-            result_text += text_line + "\n"
-
-    return result_text.strip()
+    return result.strip()
 
 
-@dp.message()
-async def forward_zoo_news(message: types.Message):
-    if message.chat.id != SOURCE_CHAT_ID:
+# ===== Хэндлер для сообщений канала =====
+@dp.channel_post()
+async def handle_channel_post(message: types.Message):
+
+    if message.chat.id != SOURCE_CHANNEL_ID:
         return
 
-    if not message.text.startswith("ZooNews: Еда в магазине"):
+    content = message.text or message.caption
+    if not content or not content.startswith("ZooNews: Еда в магазине"):
         return
 
-    content = message.text[len("ZooNews: Еда в магазине"):].strip()
+    content = content.replace("ZooNews: Еда в магазине", "").strip()
     if not content:
         return
 
-    cleaned_content = clean_text(content)
-    final_text = format_with_emoji(cleaned_content)
+    cleaned = clean_text(content)
+    final = format_with_emoji(cleaned)
 
-    if not final_text:
-        print("Нет строк с товарами для отправки")
+    if not final:
+        print("Нет данных для отправки")
         return
 
+    # ==== ОТПРАВКА В ГРУППУ ====
     try:
         await bot.send_message(
             TARGET_CHAT_ID,
-            final_text,
-            parse_mode="HTML"  # <--- HTML будет работать
+            final,
+            parse_mode="HTML",
+            message_thread_id=TARGET_THREAD_ID
         )
-        print(f"Отправлено:\n{final_text}\n")
+        print("Отправлено в группу.")
     except TelegramAPIError as e:
-        print(f"Ошибка при отправке: {e}")
+        print("Ошибка отправки в группу:", e)
+
+    # ==== ОТПРАВКА В КАНАЛ ====
+    try:
+        await bot.send_message(
+            TARGET_CHANNEL_ID,
+            final,
+            parse_mode="HTML"
+        )
+        print("Отправлено в канал.")
+    except TelegramAPIError as e:
+        print("Ошибка отправки в канал:", e)
 
 
+# ===== Главная функция =====
 async def main():
-    print("Бот запущен. Жду новые сообщения...")
+    print("Бот запущен и слушает канал...")
     await dp.start_polling(bot)
 
 

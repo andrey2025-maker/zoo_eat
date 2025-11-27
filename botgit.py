@@ -13,10 +13,8 @@ TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 SOURCE_CHAT_ID = -1003455001864
 TARGET_CHAT_ID = -1003158225734
 
-# Слова, которые нужно удалить
 REMOVE_WORDS = ["Груша", "Ананас"]
 
-# Замена на "красивые" названия
 REPLACE_WORDS = {
     "Манго": "Gold Mango",
     "Драконий фрукт": "Dragon Fruit",
@@ -32,7 +30,6 @@ REPLACE_WORDS = {
     "Желудь": "Желудь",
 }
 
-# Эмодзи для фруктов
 EMOJI_MAP = {
     "Gold Mango": "🥭",
     "Dragon Fruit": "🐲",
@@ -48,7 +45,6 @@ EMOJI_MAP = {
     "Желудь": "🌰",
 }
 
-# Какие слова делать жирными
 BOLD_FRUITS = {
     "Gold Mango": False,
     "Dragon Fruit": False,
@@ -61,10 +57,8 @@ BOLD_FRUITS = {
     "Deepsea Pearl": True,
     "Volt Gingko": True,
     "Клюква": True,
-    "Желудь": False,
+    "Желудь": True,
 }
-
-# =====================
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
@@ -75,9 +69,8 @@ def clean_text(text: str) -> str:
     for word in REMOVE_WORDS:
         pattern = r".{0,3}" + re.escape(word)
         text = re.sub(pattern, "", text)
-    # Удаляем все эмодзи из текста
     emoji_pattern = re.compile(
-        "[" 
+        "["
         "\U0001F600-\U0001F64F"
         "\U0001F300-\U0001F5FF"
         "\U0001F680-\U0001F6FF"
@@ -93,15 +86,10 @@ def clean_text(text: str) -> str:
     return emoji_pattern.sub(r'', text).strip()
 
 
-def escape_markdown(text: str) -> str:
-    """Экранируем специальные символы MarkdownV2."""
-    return re.sub(r'([_\*\[\]\(\)~`>#+\-=|{}.!])', r'\\\1', text)
-
-
-def format_with_emoji_markdown(text: str) -> str:
-    """Форматирование текста с эмодзи и жирным через MarkdownV2."""
+def format_with_emoji(text: str):
+    """Форматирование текста с эмодзи и жирным шрифтом через HTML."""
     lines = text.split("\n")
-    result_lines = []
+    result_text = ""
 
     for line in lines:
         match = re.match(r"(x\d+)\s*(.+)", line)
@@ -109,25 +97,24 @@ def format_with_emoji_markdown(text: str) -> str:
             quantity = match.group(1)
             item_orig = match.group(2).strip()
 
-            # Замена на красивое название
-            item_cleaned = REPLACE_WORDS.get(item_orig, item_orig)
+            for key in REPLACE_WORDS:
+                if key in item_orig:
+                    item_cleaned = REPLACE_WORDS[key]
+                    break
+            else:
+                item_cleaned = item_orig
 
-            # Эмодзи
+            print(f"Обрабатываем: '{item_orig}' -> '{item_cleaned}'")
+
             emoji = EMOJI_MAP.get(item_cleaned, "❓")
 
-            # MarkdownV2 жирность
-            if BOLD_FRUITS.get(item_cleaned, False):
-                item_display = f"*{item_cleaned}*"
-            else:
-                item_display = item_cleaned
+            is_bold = BOLD_FRUITS.get(item_cleaned, False)
+            display_name = f"<b>{item_cleaned}</b>" if is_bold else item_cleaned
 
-            # Формируем строку
-            text_line = f"{emoji} {quantity} {item_display} — stock"
-            # Экранируем MarkdownV2 символы
-            text_line = escape_markdown(text_line)
-            result_lines.append(text_line)
+            text_line = f"{emoji} {quantity} {display_name} — stock"
+            result_text += text_line + "\n"
 
-    return "\n".join(result_lines)
+    return result_text.strip()
 
 
 @dp.message()
@@ -143,7 +130,7 @@ async def forward_zoo_news(message: types.Message):
         return
 
     cleaned_content = clean_text(content)
-    final_text = format_with_emoji_markdown(cleaned_content)
+    final_text = format_with_emoji(cleaned_content)
 
     if not final_text:
         print("Нет строк с товарами для отправки")
@@ -153,7 +140,7 @@ async def forward_zoo_news(message: types.Message):
         await bot.send_message(
             TARGET_CHAT_ID,
             final_text,
-            parse_mode="MarkdownV2"
+            parse_mode="HTML"  # <--- HTML будет работать
         )
         print(f"Отправлено:\n{final_text}\n")
     except TelegramAPIError as e:

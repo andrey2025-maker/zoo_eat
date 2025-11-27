@@ -4,14 +4,17 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import MessageEntity
 from aiogram.exceptions import TelegramAPIError
+from dotenv import load_dotenv
+
+# ===== Загрузка переменных окружения =====
+load_dotenv()  # Подгружаем .env
 
 # ===== Настройки =====
-# Токен берется из переменной окружения
 TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 SOURCE_CHAT_ID = -1003455001864
 TARGET_CHAT_ID = -1003158225734
 
-# Список слов, которые нужно удалить полностью (если нужно)
+# Список слов, которые нужно удалить полностью
 REMOVE_WORDS = ["Груша", "Ананас"]
 
 # Слова для замены на "красивое" название
@@ -30,7 +33,7 @@ REPLACE_WORDS = {
     "Желудь": "Желудь",
 }
 
-# Обычные эмодзи для всех фруктов
+# Эмодзи для фруктов
 EMOJI_MAP = {
     "Gold Mango": "🥭",
     "Dragon Fruit": "🐲",
@@ -74,7 +77,7 @@ def clean_text(text: str) -> str:
         text = re.sub(pattern, "", text)
     # Удаляем все эмодзи из текста
     emoji_pattern = re.compile(
-        "["
+        "[" 
         "\U0001F600-\U0001F64F"
         "\U0001F300-\U0001F5FF"
         "\U0001F680-\U0001F6FF"
@@ -89,9 +92,8 @@ def clean_text(text: str) -> str:
     )
     return emoji_pattern.sub(r'', text).strip()
 
-
 def format_with_emoji(text: str):
-    """Форматирование текста с обычными эмодзи и жирным шрифтом по настройке BOLD_FRUITS."""
+    """Форматирование текста с эмодзи и жирным шрифтом через MessageEntity."""
     lines = text.split("\n")
     result_text = ""
     entities = []
@@ -102,7 +104,7 @@ def format_with_emoji(text: str):
             quantity = match.group(1)
             item_orig = match.group(2).strip()
 
-            # Удаляем все после ключевого слова для точной замены
+            # Замена на "красивое" название
             for key in REPLACE_WORDS:
                 if key in item_orig:
                     item_cleaned = REPLACE_WORDS[key]
@@ -110,30 +112,27 @@ def format_with_emoji(text: str):
             else:
                 item_cleaned = item_orig
 
-            print(f"Обрабатываем: '{item_orig}' -> '{item_cleaned}'")
-
             # Эмодзи
             emoji = EMOJI_MAP.get(item_cleaned, "❓")
 
             # Жирный шрифт
             is_bold = BOLD_FRUITS.get(item_cleaned, False)
-            display_name = f"<b>{item_cleaned}</b>" if is_bold else item_cleaned
+            display_name = item_cleaned  # Убираем <b>
 
-            # Формирование строки
+            # Формируем строку
             text_line = f"{emoji} {quantity} {display_name} — stock"
-            start_offset = len(result_text) + text_line.find(item_cleaned)
+            start_offset = len(result_text) + text_line.find(display_name)
             result_text += text_line + "\n"
 
-            # Добавление MessageEntity для жирного текста, если нужно
+            # Добавление MessageEntity для жирного текста
             if is_bold:
                 entities.append(MessageEntity(
                     type="bold",
                     offset=start_offset,
-                    length=len(item_cleaned)
+                    length=len(display_name)
                 ))
 
     return result_text.strip(), entities
-
 
 @dp.message()
 async def forward_zoo_news(message: types.Message):
@@ -158,17 +157,15 @@ async def forward_zoo_news(message: types.Message):
         await bot.send_message(
             TARGET_CHAT_ID,
             final_text,
-            entities=entities
+            entities=entities  # parse_mode не нужен
         )
         print(f"Отправлено:\n{final_text}\n")
     except TelegramAPIError as e:
         print(f"Ошибка при отправке: {e}")
 
-
 async def main():
     print("Бот запущен. Жду новые сообщения...")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())

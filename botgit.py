@@ -12,7 +12,7 @@ TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 # ===== Чаты =====
 SOURCE_CHANNEL_ID = -1003291808303  # Канал, откуда бот читает
 TARGET_CHAT_ID = -1003294880580     # Группа, куда отправлять
-TARGET_CHANNEL_ID = -1002937331045  # Канал, куда отправлять
+TARGET_CHANNEL_ID = -1003268009539  # Канал, куда отправлять
 
 # ID темы внутри группы
 TARGET_THREAD_ID = 4

@@ -24,7 +24,7 @@ EXTRA_GROUP_2_THREAD_ID = 2974            # основная тема в гру�
 EXTRA_GROUP_2_TOPIC_ROBLOX_ID = 5634      # тема для roblox.com
 
 # ===== Настройки =====
-REMOVE_WORDS = ["Груша", "Ананас"]
+REMOVE_WORDS = ["@Pear", "@Pineapple"]
 
 REPLACE_WORDS = {
     "@Gold Mango": "Gold Mango",

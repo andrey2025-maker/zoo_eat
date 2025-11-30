@@ -10,29 +10,35 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 
 # ===== Чаты =====
-SOURCE_CHANNEL_ID = -1003291808303  # Канал, откуда бот читает
-TARGET_CHAT_ID = -1003294880580     # Группа, куда отправлять
-TARGET_CHANNEL_ID = -1003268009539  # Канал, куда отправлять
+SOURCE_CHANNEL_ID = -1003291808303   # Канал, откуда бот читает
+TARGET_CHAT_ID = -1003294880580      # Группа, куда отправлять
+TARGET_CHANNEL_ID = -1003268009539   # Канал, куда отправлять
 
-# ID темы внутри группы
+# ID темы внутри основной группы
 TARGET_THREAD_ID = 4
+
+# ===== ДОПОЛНИТЕЛЬНЫЕ ГРУППЫ =====
+EXTRA_GROUP_1_ID = -1003455001864         # группа без темы
+EXTRA_GROUP_2_ID = -1003474031039         # группа с темами
+EXTRA_GROUP_2_THREAD_ID = 2974            # основная тема в группе 2
+EXTRA_GROUP_2_TOPIC_ROBLOX_ID = 5634      # тема для roblox.com
 
 # ===== Настройки =====
 REMOVE_WORDS = ["Груша", "Ананас"]
 
 REPLACE_WORDS = {
-    "Манго": "Gold Mango",
-    "Драконий фрукт": "Dragon Fruit",
-    "КровавыйКамень Цукад": "Bloodstone Cycad",
-    "Зеленый Кристалл": "Colossal Pinecone",
-    "Киви": "Франкен Киви",
-    "Тыква": "Тыква",
-    "Дуриан": "Дуриан",
-    "Конфета": "Candy Corn",
-    "Ракушка": "Deepsea Pearl",
-    "Вольт Юрский": "Volt Gingko",
-    "Клюква": "Клюква",
-    "Желудь": "Желудь",
+    "@Gold Mango": "Gold Mango",
+    "@DragonFruit": "Dragon Fruit",
+    "@BloodstoneCycad": "Bloodstone Cycad",
+    "@ColossalPinecone": "Colossal Pinecone",
+    "@FrankenKiwi": "Франкен Киви",
+    "@Pumpkin": "Тыква",
+    "@Durian": "Дуриан",
+    "@CandyCorn": "Candy Corn",
+    "@DeepseaPearlFruit": "Deepsea Pearl",
+    "@VoltGinkgo": "Volt Gingko",
+    "@Cranberry": "Клюква",
+    "@role": "Желудь",  # добавлено
 }
 
 EMOJI_MAP = {
@@ -69,7 +75,7 @@ BOLD_FRUITS = {
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# ===== Функции обработки =====
+# ===== Функции =====
 def clean_text(text: str) -> str:
     """Удаляет запрещённые слова и эмодзи."""
     for word in REMOVE_WORDS:
@@ -92,7 +98,6 @@ def clean_text(text: str) -> str:
     )
     return emoji_pattern.sub("", text).strip()
 
-
 def format_with_emoji(text: str) -> str:
     """Добавляет эмодзи и жирный текст через HTML."""
     lines = text.split("\n")
@@ -101,49 +106,56 @@ def format_with_emoji(text: str) -> str:
         match = re.match(r"(x\d+)\s*(.+)", line)
         if not match:
             continue
-
         qty = match.group(1)
         item_raw = match.group(2).strip()
-
         for key, val in REPLACE_WORDS.items():
             if key in item_raw:
                 item = val
                 break
         else:
             item = item_raw
-
         emoji = EMOJI_MAP.get(item, "❓")
         bold = BOLD_FRUITS.get(item, False)
         name = f"<b>{item}</b>" if bold else item
-
         result += f"{emoji} {qty} {name} — stock\n"
-
     return result.strip()
 
-
-# ===== Хэндлер для сообщений канала =====
+# ===== Хэндлер =====
 @dp.channel_post()
 async def handle_channel_post(message: types.Message):
-
     if message.chat.id != SOURCE_CHANNEL_ID:
         return
 
     content = message.text or message.caption
-    if not content or not content.startswith("ZooNews: Еда в магазине"):
+    if not content:
         return
 
-    content = content.replace("ZooNews: Еда в магазине", "").strip()
-    if not content:
+    # -----------------------------
+    # 1️⃣ Roblox-сообщения (любой текст с roblox.com)
+    # -----------------------------
+    if "roblox.com" in content.lower():
+        try:
+            await bot.send_message(
+                EXTRA_GROUP_2_ID,
+                content,
+                parse_mode="HTML",
+                message_thread_id=EXTRA_GROUP_2_TOPIC_ROBLOX_ID
+            )
+            print("Отправлено в тему ROBLOX.")
+        except TelegramAPIError as e:
+            print("Ошибка отправки в тему ROBLOX:", e)
+        return  # не продолжаем обработку
+
+    # -----------------------------
+    # 2️⃣ Фруктовые сообщения (начинаются с ZooNews: Еда в магазине)
+    # -----------------------------
+    if not content.startswith("ZooNews: Еда в магазине"):
         return
 
     cleaned = clean_text(content)
     final = format_with_emoji(cleaned)
 
-    if not final:
-        print("Нет данных для отправки")
-        return
-
-    # ==== ОТПРАВКА В ГРУППУ ====
+    # Отправляем в основные группы и каналы
     try:
         await bot.send_message(
             TARGET_CHAT_ID,
@@ -151,11 +163,10 @@ async def handle_channel_post(message: types.Message):
             parse_mode="HTML",
             message_thread_id=TARGET_THREAD_ID
         )
-        print("Отправлено в группу.")
+        print("Отправлено в основную группу.")
     except TelegramAPIError as e:
-        print("Ошибка отправки в группу:", e)
+        print("Ошибка отправки в основную группу:", e)
 
-    # ==== ОТПРАВКА В КАНАЛ ====
     try:
         await bot.send_message(
             TARGET_CHANNEL_ID,
@@ -166,12 +177,31 @@ async def handle_channel_post(message: types.Message):
     except TelegramAPIError as e:
         print("Ошибка отправки в канал:", e)
 
+    try:
+        await bot.send_message(
+            EXTRA_GROUP_1_ID,
+            final,
+            parse_mode="HTML"
+        )
+        print("Отправлено в доп. группу 1.")
+    except TelegramAPIError as e:
+        print("Ошибка отправки в доп. группу 1:", e)
+
+    try:
+        await bot.send_message(
+            EXTRA_GROUP_2_ID,
+            final,
+            parse_mode="HTML",
+            message_thread_id=EXTRA_GROUP_2_THREAD_ID
+        )
+        print("Отправлено в доп. группу 2 (фрукты).")
+    except TelegramAPIError as e:
+        print("Ошибка отправки в доп. группу 2 (фрукты):", e)
 
 # ===== Главная функция =====
 async def main():
     print("Бот запущен и слушает канал...")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())

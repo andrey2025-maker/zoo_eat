@@ -38,7 +38,7 @@ REPLACE_WORDS = {
     "@DeepseaPearlFruit": "Deepsea Pearl",
     "@VoltGinkgo": "Volt Gingko",
     "@Cranberry": "Клюква",
-    "@role": "Желудь",  # добавлено
+    "@Acorn": "Желудь",  # добавлено
 }
 
 EMOJI_MAP = {
